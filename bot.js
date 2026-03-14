@@ -61,7 +61,7 @@ client.on("interactionCreate", async interaction => {
    const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
    const sessions = await sessionsRes.json();
 
-   const expertServer = sessions.result.find(s => s.name === "Expert Server");
+   const expertServer = sessions.result.find(s => s.name === "Expert");
 
    const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
    const flightsData = await flightsRes.json();
