@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, Routes, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, SlashCommandBuilder, Routes } = require("discord.js");
 const { REST } = require("@discordjs/rest");
 const fetch = require("node-fetch");
 
@@ -34,7 +34,11 @@ const commands = [
 
  new SlashCommandBuilder()
   .setName("vaonline")
-  .setDescription("Show number of Luxair Virtual pilots currently flying")
+  .setDescription("Number of Luxair Virtual pilots currently flying"),
+
+ new SlashCommandBuilder()
+  .setName("vapilots")
+  .setDescription("List Luxair Virtual pilots currently flying")
 
 ].map(cmd => cmd.toJSON());
 
@@ -57,102 +61,93 @@ client.on("interactionCreate", async interaction => {
 
  if (!interaction.isChatInputCommand()) return;
 
+ await interaction.deferReply();
+
  try {
 
-  // GET SERVERS
+  // SERVERS
   const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
   const sessionsData = await sessionsRes.json();
+
   const expertServer = sessionsData.result.find(s => s.worldType === 3);
 
-  // GET FLIGHTS
+  // FLIGHTS
   const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
   const flightsData = await flightsRes.json();
+
   const flights = flightsData.result;
 
   const vaFlights = flights.filter(f => pilots.includes(f.username));
 
-  // =========================
+  // =====================
   // /vaonline
-  // =========================
+  // =====================
 
   if (interaction.commandName === "vaonline") {
 
-   const embed = new EmbedBuilder()
-    .setColor(0x00AEEF)
-    .setTitle("Luxair Virtual Status")
-    .setDescription("Current flights on **Expert Server**")
-    .addFields(
-     { name: "Pilots Online", value: `${vaFlights.length}`, inline: true }
-    )
-    .setFooter({ text: "Infinite Flight Live Data" });
+   return interaction.editReply(
+`Luxair Virtual Status (Expert Server)
 
-   return interaction.reply({ embeds: [embed] });
+Pilots Online: ${vaFlights.length}`
+   );
 
   }
 
-  // =========================
+  // =====================
+  // /vapilots
+  // =====================
+
+  if (interaction.commandName === "vapilots") {
+
+   if (vaFlights.length === 0) {
+    return interaction.editReply("No Luxair Virtual pilots currently flying.");
+   }
+
+   let output = "Luxair Virtual Pilots Online (Expert Server)\n\n";
+
+   vaFlights.forEach(f => {
+    output += `${f.callsign}\n`;
+   });
+
+   return interaction.editReply(output);
+
+  }
+
+  // =====================
   // /vaflight
-  // =========================
+  // =====================
 
   if (interaction.commandName === "vaflight") {
 
-   await interaction.deferReply();
+   if (vaFlights.length === 0) {
+    return interaction.editReply("No Luxair Virtual pilots currently flying on Expert Server.");
+   }
 
-   const aircraftRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft?apikey=${IF_API_KEY}`);
-   const aircraftData = await aircraftRes.json();
+   let output = "Luxair Virtual Flights (Expert Server)\n\n";
 
-   const embeds = [];
-
-   for (const flight of vaFlights) {
+   vaFlights.forEach(flight => {
 
     const dep = flight.flightPlan?.departureAirportId || "N/A";
     const arr = flight.flightPlan?.destinationAirportId || "N/A";
 
-    const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
-    const aircraft = aircraftObj?.name || "Unknown";
-
     const altitude = Math.round(flight.altitude);
     const speed = Math.round(flight.groundSpeed);
 
-    const embed = new EmbedBuilder()
-     .setColor(0x00AEEF)
-     .setTitle(`✈ ${flight.callsign}`)
-     .setDescription(`Luxair Virtual Flight (Expert Server)`)
-     .addFields(
-      { name: "Route", value: `${dep} → ${arr}`, inline: false },
-      { name: "Aircraft", value: aircraft, inline: true },
-      { name: "Altitude", value: `${altitude} ft`, inline: true },
-      { name: "Speed", value: `${speed} kts`, inline: true }
-     );
+    output += `✈ ${flight.callsign}\n`;
+    output += `Route: ${dep} → ${arr}\n`;
+    output += `Altitude: ${altitude} ft\n`;
+    output += `Speed: ${speed} kts\n\n`;
 
-    embeds.push(embed);
+   });
 
-   }
-
-   if (embeds.length === 0) {
-
-    const embed = new EmbedBuilder()
-     .setColor(0xff0000)
-     .setTitle("Luxair Virtual Flights")
-     .setDescription("No Luxair Virtual pilots currently flying on **Expert Server**.");
-
-    return interaction.editReply({ embeds: [embed] });
-
-   }
-
-   return interaction.editReply({ embeds });
+   return interaction.editReply(output);
 
   }
 
  } catch (err) {
 
   console.error(err);
-
-  if (interaction.deferred) {
-   interaction.editReply("Error retrieving flights.");
-  } else {
-   interaction.reply("Error retrieving flights.");
-  }
+  interaction.editReply("Error retrieving flights.");
 
  }
 
