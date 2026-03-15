@@ -61,31 +61,31 @@ client.on("interactionCreate", async interaction => {
 
  if (!interaction.isChatInputCommand()) return;
 
- await interaction.deferReply();
-
  try {
 
-  // SERVERS
+  // ===== SERVERS =====
   const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
   const sessionsData = await sessionsRes.json();
-
   const expertServer = sessionsData.result.find(s => s.worldType === 3);
 
-  // FLIGHTS
+  // ===== FLIGHTS =====
   const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
   const flightsData = await flightsRes.json();
-
   const flights = flightsData.result;
+
+  // ===== AIRCRAFT LIST =====
+  const aircraftRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft?apikey=${IF_API_KEY}`);
+  const aircraftData = await aircraftRes.json();
 
   const vaFlights = flights.filter(f => pilots.includes(f.username));
 
-  // =====================
+  // =========================
   // /vaonline
-  // =====================
+  // =========================
 
   if (interaction.commandName === "vaonline") {
 
-   return interaction.editReply(
+   return interaction.reply(
 `Luxair Virtual Status (Expert Server)
 
 Pilots Online: ${vaFlights.length}`
@@ -93,14 +93,14 @@ Pilots Online: ${vaFlights.length}`
 
   }
 
-  // =====================
+  // =========================
   // /vapilots
-  // =====================
+  // =========================
 
   if (interaction.commandName === "vapilots") {
 
    if (vaFlights.length === 0) {
-    return interaction.editReply("No Luxair Virtual pilots currently flying.");
+    return interaction.reply("No Luxair Virtual pilots currently flying.");
    }
 
    let output = "Luxair Virtual Pilots Online (Expert Server)\n\n";
@@ -109,45 +109,64 @@ Pilots Online: ${vaFlights.length}`
     output += `${f.callsign}\n`;
    });
 
-   return interaction.editReply(output);
+   return interaction.reply(output);
 
   }
 
-  // =====================
+  // =========================
   // /vaflight
-  // =====================
+  // =========================
 
   if (interaction.commandName === "vaflight") {
 
    if (vaFlights.length === 0) {
-    return interaction.editReply("No Luxair Virtual pilots currently flying on Expert Server.");
+    return interaction.reply("No Luxair Virtual pilots currently flying on Expert Server.");
    }
 
    let output = "Luxair Virtual Flights (Expert Server)\n\n";
 
-   vaFlights.forEach(flight => {
+   for (const flight of vaFlights) {
 
     const dep = flight.flightPlan?.departureAirportId || "N/A";
     const arr = flight.flightPlan?.destinationAirportId || "N/A";
 
+    const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
+    const aircraft = aircraftObj?.name || "Unknown";
+
+    let livery = "Unknown";
+
+    if (aircraftObj) {
+
+     const liveryRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft/${flight.aircraftId}/liveries?apikey=${IF_API_KEY}`);
+     const liveryData = await liveryRes.json();
+     const liveryObj = liveryData.result.find(l => l.id === flight.liveryId);
+
+     if (liveryObj) livery = liveryObj.name;
+    }
+
     const altitude = Math.round(flight.altitude);
     const speed = Math.round(flight.groundSpeed);
 
+    const time = Math.floor(flight.flightTime / 60);
+
     output += `✈ ${flight.callsign}\n`;
     output += `Route: ${dep} → ${arr}\n`;
+    output += `Aircraft: ${aircraft}\n`;
+    output += `Livery: ${livery}\n`;
     output += `Altitude: ${altitude} ft\n`;
-    output += `Speed: ${speed} kts\n\n`;
+    output += `Speed: ${speed} kts\n`;
+    output += `Flight Time: ${time} min\n\n`;
 
-   });
+   }
 
-   return interaction.editReply(output);
+   return interaction.reply(output);
 
   }
 
  } catch (err) {
 
   console.error(err);
-  interaction.editReply("Error retrieving flights.");
+  interaction.reply("Error retrieving flights.");
 
  }
 
