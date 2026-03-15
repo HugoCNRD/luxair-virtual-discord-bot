@@ -27,9 +27,15 @@ const client = new Client({
 });
 
 const commands = [
+
  new SlashCommandBuilder()
   .setName("vaflight")
-  .setDescription("Show Luxair Virtual flights currently online")
+  .setDescription("Show Luxair Virtual flights currently online"),
+
+ new SlashCommandBuilder()
+  .setName("vaonline")
+  .setDescription("Show number of Luxair Virtual pilots currently flying")
+
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
@@ -51,31 +57,53 @@ client.on("interactionCreate", async interaction => {
 
  if (!interaction.isChatInputCommand()) return;
 
- if (interaction.commandName === "vaflight") {
+ try {
 
-  await interaction.deferReply();
+  // GET SERVERS
+  const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
+  const sessionsData = await sessionsRes.json();
+  const expertServer = sessionsData.result.find(s => s.worldType === 3);
 
-  try {
+  // GET FLIGHTS
+  const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
+  const flightsData = await flightsRes.json();
+  const flights = flightsData.result;
 
-   // GET SERVERS
-   const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
-   const sessionsData = await sessionsRes.json();
-   const expertServer = sessionsData.result.find(s => s.worldType === 3);
+  const vaFlights = flights.filter(f => pilots.includes(f.username));
 
-   // GET FLIGHTS
-   const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
-   const flightsData = await flightsRes.json();
-   const flights = flightsData.result;
+  // =========================
+  // /vaonline
+  // =========================
 
-   // GET AIRCRAFT LIST
+  if (interaction.commandName === "vaonline") {
+
+   const embed = new EmbedBuilder()
+    .setColor(0x00AEEF)
+    .setTitle("Luxair Virtual Status")
+    .setDescription("Current flights on **Expert Server**")
+    .addFields(
+     { name: "Pilots Online", value: `${vaFlights.length}`, inline: true }
+    )
+    .setFooter({ text: "Infinite Flight Live Data" });
+
+   return interaction.reply({ embeds: [embed] });
+
+  }
+
+  // =========================
+  // /vaflight
+  // =========================
+
+  if (interaction.commandName === "vaflight") {
+
+   await interaction.deferReply();
+
    const aircraftRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft?apikey=${IF_API_KEY}`);
    const aircraftData = await aircraftRes.json();
 
    const embeds = [];
 
-   for (const flight of flights) {
-
-    if (!pilots.includes(flight.username)) continue;
+   for (const flight of vaFlights) {
 
     const dep = flight.flightPlan?.departureAirportId || "N/A";
     const arr = flight.flightPlan?.destinationAirportId || "N/A";
@@ -83,30 +111,19 @@ client.on("interactionCreate", async interaction => {
     const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
     const aircraft = aircraftObj?.name || "Unknown";
 
-    let livery = "Unknown";
-
-    if (aircraftObj) {
-     const liveryRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft/${flight.aircraftId}/liveries?apikey=${IF_API_KEY}`);
-     const liveryData = await liveryRes.json();
-     const liveryObj = liveryData.result.find(l => l.id === flight.liveryId);
-     if (liveryObj) livery = liveryObj.name;
-    }
-
     const altitude = Math.round(flight.altitude);
     const speed = Math.round(flight.groundSpeed);
 
     const embed = new EmbedBuilder()
      .setColor(0x00AEEF)
      .setTitle(`✈ ${flight.callsign}`)
-     .setDescription(`**Luxair Virtual Flight (Expert Server)**`)
+     .setDescription(`Luxair Virtual Flight (Expert Server)`)
      .addFields(
       { name: "Route", value: `${dep} → ${arr}`, inline: false },
       { name: "Aircraft", value: aircraft, inline: true },
-      { name: "Livery", value: livery, inline: true },
       { name: "Altitude", value: `${altitude} ft`, inline: true },
-      { name: "Ground Speed", value: `${speed} kts`, inline: true }
-     )
-     .setFooter({ text: "Infinite Flight Live Data" });
+      { name: "Speed", value: `${speed} kts`, inline: true }
+     );
 
     embeds.push(embed);
 
@@ -123,13 +140,18 @@ client.on("interactionCreate", async interaction => {
 
    }
 
-   await interaction.editReply({ embeds });
+   return interaction.editReply({ embeds });
 
-  } catch (err) {
+  }
 
-   console.error(err);
-   await interaction.editReply("Error retrieving flights.");
+ } catch (err) {
 
+  console.error(err);
+
+  if (interaction.deferred) {
+   interaction.editReply("Error retrieving flights.");
+  } else {
+   interaction.reply("Error retrieving flights.");
   }
 
  }
