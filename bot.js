@@ -7,7 +7,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const IF_API_KEY = process.env.IF_API_KEY;
 
-// Pilotes VA
+// Liste pilotes VA
 const pilots = [
  "Arendiuz",
  "FreshOuttaPoland",
@@ -23,31 +23,23 @@ const pilots = [
  "G-OJON"
 ];
 
-// Discord client
 const client = new Client({
  intents: [GatewayIntentBits.Guilds]
 });
 
-// Slash command
 const commands = [
  new SlashCommandBuilder()
   .setName("vaflight")
   .setDescription("Show VA flights currently online")
-].map(command => command.toJSON());
+].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
-// Register slash command
 async function registerCommands() {
- try {
-  await rest.put(
-   Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-   { body: commands }
-  );
-  console.log("Slash command registered");
- } catch (err) {
-  console.error("Command registration error:", err);
- }
+ await rest.put(
+  Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+  { body: commands }
+ );
 }
 
 registerCommands();
@@ -56,7 +48,6 @@ client.once("ready", () => {
  console.log(`Bot ready: ${client.user.tag}`);
 });
 
-// Interaction handler
 client.on("interactionCreate", async interaction => {
 
  if (!interaction.isChatInputCommand()) return;
@@ -67,52 +58,69 @@ client.on("interactionCreate", async interaction => {
 
   try {
 
-   // Get sessions
+   // 1️⃣ sessions
    const sessionsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions?apikey=${IF_API_KEY}`);
    const sessionsData = await sessionsRes.json();
 
    const expertServer = sessionsData.result.find(s => s.worldType === 3);
 
-   if (!expertServer) {
-    return interaction.editReply("Expert server not found.");
-   }
-
-   // Get flights
+   // 2️⃣ flights
    const flightsRes = await fetch(`https://api.infiniteflight.com/public/v2/sessions/${expertServer.id}/flights?apikey=${IF_API_KEY}`);
    const flightsData = await flightsRes.json();
+
    const flights = flightsData.result;
 
-   // Get aircraft list
+   // 3️⃣ aircraft list
    const aircraftRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft?apikey=${IF_API_KEY}`);
    const aircraftData = await aircraftRes.json();
 
-   // Get liveries
-   const liveriesRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft/liveries?apikey=${IF_API_KEY}`);
-   const liveriesData = await liveriesRes.json();
-
    let output = "";
 
-   flights.forEach(flight => {
+   for (const flight of flights) {
 
-    if (pilots.includes(flight.username)) {
+    if (!pilots.includes(flight.username)) continue;
 
-     const callsign = flight.callsign || "N/A";
+    const callsign = flight.callsign || "N/A";
 
-     const dep = flight.flightPlan?.departureAirportId || "N/A";
-     const arr = flight.flightPlan?.destinationAirportId || "N/A";
+    // ROUTE
+    const dep =
+     flight.flightPlan?.departureAirportId ||
+     flight.departureAirportId ||
+     "N/A";
 
-     const aircraft = aircraftData.result.find(a => a.id === flight.aircraftId)?.name || "Unknown";
+    const arr =
+     flight.flightPlan?.destinationAirportId ||
+     flight.destinationAirportId ||
+     "N/A";
 
-     const livery = liveriesData.result.find(l => l.id === flight.liveryId)?.name || "Unknown";
+    // AIRCRAFT
+    const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
+    const aircraft = aircraftObj?.name || "Unknown";
 
-     output += `✈ **${callsign}**\n`;
-     output += `Route: ${dep} → ${arr}\n`;
-     output += `Aircraft: ${aircraft}\n`;
-     output += `Livery: ${livery}\n\n`;
+    // LIVERY
+    let livery = "Unknown";
 
+    if (aircraftObj) {
+
+     const liveryRes = await fetch(
+      `https://api.infiniteflight.com/public/v2/aircraft/${flight.aircraftId}/liveries?apikey=${IF_API_KEY}`
+     );
+
+     const liveryData = await liveryRes.json();
+
+     const liveryObj = liveryData.result.find(l => l.id === flight.liveryId);
+
+     if (liveryObj) {
+      livery = liveryObj.name;
+     }
     }
 
-   });
+    output += `✈ **${callsign}**\n`;
+    output += `Route: ${dep} → ${arr}\n`;
+    output += `Aircraft: ${aircraft}\n`;
+    output += `Livery: ${livery}\n\n`;
+
+   }
 
    if (output === "") {
     output = "No Luxair Virtual pilots currently flying.";
@@ -122,8 +130,8 @@ client.on("interactionCreate", async interaction => {
 
   } catch (err) {
 
-   console.error("Flight retrieval error:", err);
-   await interaction.editReply("Error retrieving flights from Infinite Flight API.");
+   console.error(err);
+   await interaction.editReply("Error retrieving flights.");
 
   }
 
