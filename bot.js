@@ -117,51 +117,72 @@ Pilots Online: ${vaFlights.length}`
   // /vaflight
   // =========================
 
-  if (interaction.commandName === "vaflight") {
+if (interaction.commandName === "vaflight") {
 
-   if (vaFlights.length === 0) {
-    return interaction.reply("No Luxair Virtual pilots currently flying on Expert Server.");
-   }
+ if (vaFlights.length === 0) {
+  return interaction.reply("No Luxair Virtual pilots currently flying on Expert Server.");
+ }
 
-   let output = "Luxair Virtual Flights (Expert Server)\n\n";
+ let output = "Luxair Virtual Flights (Expert Server)\n\n";
 
-   for (const flight of vaFlights) {
+ for (const flight of vaFlights) {
 
-    const dep = flight.flightPlan?.departureAirportId || "N/A";
-    const arr = flight.flightPlan?.destinationAirportId || "N/A";
+  // ROUTE (plus robuste)
+  const dep =
+   flight.flightPlan?.departureAirportId ||
+   flight.departureAirportId ||
+   "Unknown";
 
-    const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
-    const aircraft = aircraftObj?.name || "Unknown";
+  const arr =
+   flight.flightPlan?.destinationAirportId ||
+   flight.destinationAirportId ||
+   "Unknown";
 
-    let livery = "Unknown";
+  // SPEED (corrige NaN)
+  const speed = Math.round(
+   flight.groundSpeed ||
+   flight.speed ||
+   0
+  );
 
-    if (aircraftObj) {
+  // ALTITUDE
+  const altitude = Math.round(flight.altitude || 0);
 
-     const liveryRes = await fetch(`https://api.infiniteflight.com/public/v2/aircraft/${flight.aircraftId}/liveries?apikey=${IF_API_KEY}`);
-     const liveryData = await liveryRes.json();
-     const liveryObj = liveryData.result.find(l => l.id === flight.liveryId);
+  // FLIGHT TIME
+  const time = Math.floor((flight.flightTime || 0) / 60);
 
-     if (liveryObj) livery = liveryObj.name;
-    }
+  // AIRCRAFT
+  const aircraftObj = aircraftData.result.find(a => a.id === flight.aircraftId);
+  const aircraft = aircraftObj ? aircraftObj.name : "Unknown";
 
-    const altitude = Math.round(flight.altitude);
-    const speed = Math.round(flight.groundSpeed);
+  // LIVERY
+  let livery = "Unknown";
 
-    const time = Math.floor(flight.flightTime / 60);
+  if (aircraftObj) {
 
-    output += `✈ ${flight.callsign}\n`;
-    output += `Route: ${dep} → ${arr}\n`;
-    output += `Aircraft: ${aircraft}\n`;
-    output += `Livery: ${livery}\n`;
-    output += `Altitude: ${altitude} ft\n`;
-    output += `Speed: ${speed} kts\n`;
-    output += `Flight Time: ${time} min\n\n`;
+   const liveryRes = await fetch(
+    `https://api.infiniteflight.com/public/v2/aircraft/${flight.aircraftId}/liveries?apikey=${IF_API_KEY}`
+   );
 
-   }
+   const liveryData = await liveryRes.json();
 
-   return interaction.reply(output);
+   const liveryObj = liveryData.result.find(l => l.id === flight.liveryId);
 
+   if (liveryObj) livery = liveryObj.liveryName;
   }
+
+  output += `✈ ${flight.callsign}\n`;
+  output += `Route: ${dep} → ${arr}\n`;
+  output += `Aircraft: ${aircraft}\n`;
+  output += `Livery: ${livery}\n`;
+  output += `Altitude: ${altitude} ft\n`;
+  output += `Speed: ${speed} kts\n`;
+  output += `Flight Time: ${time} min\n\n`;
+
+ }
+
+ return interaction.reply(output);
+}
 
  } catch (err) {
 
